@@ -77,6 +77,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast"; // Ensure this is the correct path for the toast component
 import { useGame } from "@/contexts/GameContext";
 
 interface GameWinnerModalProps {
@@ -93,33 +94,35 @@ const GameWinnerModal = ({ isOpen, players, onClose, onPlayAgain }: GameWinnerMo
       ? players[1].name 
       : "It's a tie";
 
-  const handleCloseModal = (open: boolean) => {
+  const handleCloseModal = async (open: boolean) => {
     if (!open) {
-      onClose();
+      // Upload scores of both players before closing the game
+      await uploadScores();
+      onClose(); // Call the onClose handler after uploading scores
     }
   };
 
-  const handleUploadScore = async () => {
-    const player = prompt("Enter your player name to upload the score:");
-    if (player) {
-      const game = "bucket"; // Replace 'bucket' with your actual game name
-      const score = winner === players[0].name ? players[0].score : players[1].score;
-      
+  const uploadScores = async () => {
+    const game = "bucket"; // Replace 'bucket' with your actual game name
+    const uploadScore = async (player: string, score: number) => {
       try {
         const response = await fetch(`../save.php?player=${player}&game=${game}&score=${score}`, {
           method: "GET",
         });
-
         if (response.ok) {
-          toast("Score uploaded successfully.");
+          toast(`${player}'s score uploaded successfully.`);
         } else {
-          toast("Failed to upload score.");
+          toast(`Failed to upload ${player}'s score.`);
         }
       } catch (error) {
-        console.error("Error uploading score:", error);
-        toast("An error occurred while uploading the score.");
+        console.error(`Error uploading ${player}'s score:`, error);
+        toast(`An error occurred while uploading ${player}'s score.`);
       }
-    }
+    };
+
+    await Promise.all(
+      players.map(({ name, score }) => uploadScore(name, score))
+    );
   };
 
   return (
@@ -147,15 +150,8 @@ const GameWinnerModal = ({ isOpen, players, onClose, onPlayAgain }: GameWinnerMo
               Play Again
             </Button>
             <Button 
-              onClick={handleUploadScore} 
-              size="lg"
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              Upload Score
-            </Button>
-            <Button 
               variant="outline" 
-              onClick={onClose} 
+              onClick={() => handleCloseModal(false)} 
               size="lg"
               className="bg-indigo-600 hover:bg-indigo-700 text-white border-none"
             >
