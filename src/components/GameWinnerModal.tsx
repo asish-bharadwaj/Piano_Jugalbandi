@@ -69,6 +69,7 @@
 // };
 
 // export default GameWinnerModal;
+
 import React from "react";
 import {
   Dialog,
@@ -77,8 +78,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/components/ui/toast"; // Ensure this is the correct path for the toast component
-import { useGame } from "@/contexts/GameContext";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 interface GameWinnerModalProps {
   isOpen: boolean;
@@ -87,42 +88,53 @@ interface GameWinnerModalProps {
   onPlayAgain: () => void;
 }
 
-const GameWinnerModal = ({ isOpen, players, onClose, onPlayAgain }: GameWinnerModalProps) => {
-  const winner = players[0].score > players[1].score 
-    ? players[0].name 
-    : players[0].score < players[1].score 
-      ? players[1].name 
+const GameWinnerModal = ({
+  isOpen,
+  players,
+  onClose,
+  onPlayAgain,
+}: GameWinnerModalProps) => {
+  const winner =
+    players[0].score > players[1].score
+      ? players[0].name
+      : players[0].score < players[1].score
+      ? players[1].name
       : "It's a tie";
 
-  const handleCloseModal = async (open: boolean) => {
-    if (!open) {
-      // Upload scores of both players before closing the game
-      await uploadScores();
-      onClose(); // Call the onClose handler after uploading scores
-    }
-  };
-
   const uploadScores = async () => {
-    const game = "bucket"; // Replace 'bucket' with your actual game name
+    const game = "piano_game"; // Name of the game
+
     const uploadScore = async (player: string, score: number) => {
       try {
-        const response = await fetch(`../save.php?player=${player}&game=${game}&score=${score}`, {
-          method: "GET",
-        });
+        const response = await fetch(
+          `../save.php?player=${encodeURIComponent(player)}&game=${encodeURIComponent(
+            game
+          )}&score=${score}`,
+          {
+            method: "GET",
+          }
+        );
         if (response.ok) {
-          toast(`${player}'s score uploaded successfully.`);
+          toast.success(`Score for ${player} uploaded successfully.`);
         } else {
-          toast(`Failed to upload ${player}'s score.`);
+          toast.error(`Failed to upload score for ${player}.`);
         }
       } catch (error) {
-        console.error(`Error uploading ${player}'s score:`, error);
-        toast(`An error occurred while uploading ${player}'s score.`);
+        toast.error(`Error uploading score for ${player}.`);
       }
     };
 
+    // Upload scores for both players
     await Promise.all(
       players.map(({ name, score }) => uploadScore(name, score))
     );
+  };
+
+  const handleCloseModal = (open: boolean) => {
+    if (!open) {
+      uploadScores(); // Upload scores when closing the game
+      onClose(); // Resume the game
+    }
   };
 
   return (
@@ -135,23 +147,27 @@ const GameWinnerModal = ({ isOpen, players, onClose, onPlayAgain }: GameWinnerMo
         </DialogHeader>
         <div className="text-center space-y-6">
           <div className="space-y-2">
-            <p className="text-xl text-white/90">{players[0].name}: {players[0].score} points</p>
-            <p className="text-xl text-white/90">{players[1].name}: {players[1].score} points</p>
+            <p className="text-xl text-white/90">
+              {players[0].name}: {players[0].score} points
+            </p>
+            <p className="text-xl text-white/90">
+              {players[1].name}: {players[1].score} points
+            </p>
           </div>
           <p className="text-2xl font-semibold text-white">
             {winner === "It's a tie" ? winner : `${winner} wins!`}
           </p>
           <div className="flex justify-center space-x-4 pt-4">
-            <Button 
-              onClick={onPlayAgain} 
+            <Button
+              onClick={onPlayAgain}
               size="lg"
               className="bg-[#D946EF] hover:bg-[#D946EF]/80 text-white"
             >
               Play Again
             </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => handleCloseModal(false)} 
+            <Button
+              variant="outline"
+              onClick={() => handleCloseModal(false)}
               size="lg"
               className="bg-indigo-600 hover:bg-indigo-700 text-white border-none"
             >
@@ -163,5 +179,8 @@ const GameWinnerModal = ({ isOpen, players, onClose, onPlayAgain }: GameWinnerMo
     </Dialog>
   );
 };
+
+// Initialize Toastify notifications
+toast.configure();
 
 export default GameWinnerModal;
