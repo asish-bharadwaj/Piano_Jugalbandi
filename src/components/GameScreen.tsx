@@ -1,257 +1,145 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGame } from '@/contexts/GameContext';
 import PianoKeyboard from './PianoKeyboard';
-import { toast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { playSuccessSound, playFailureSound } from '@/utils/audioUtils';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Progress } from './ui/progress';
-import GameWinnerModal from './GameWinnerModal';
-import GameStatus from './GameStatus';
-import GuessIndicator from './GuessIndicator';
-import confetti from 'canvas-confetti';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const GameScreen: React.FC = () => {
-  const { 
-    gameState, 
-    addToSequence, 
-    checkSequence, 
-    nextTurn, 
-    resetGame,
-    resetToWelcome,
-    setRequiredLength,
-    updateScore 
-  } = useGame();
-  
-  const [lives, setLives] = useState(3);
-  const [guessStatus, setGuessStatus] = useState<Array<'correct' | 'incorrect' | 'pending'>>([]);
-  const [currentGuessIndex, setCurrentGuessIndex] = useState(0);
-  const [sequenceLength, setSequenceLength] = useState(3);
-  const [showEndGameModal, setShowEndGameModal] = useState(false);
+  const { gameState, addToSequence, checkSequence, nextTurn, resetGame } = useGame();
+  const [guessSequence, setGuessSequence] = useState<string[]>([]);
+  const [showRoundTransition, setShowRoundTransition] = useState(false);
+  const [nextRoundNumber, setNextRoundNumber] = useState(1);
 
   const currentPlayer = gameState.players[gameState.currentTurn];
+  const requiredLength = gameState.currentRound + 2;
   const isCreating = gameState.gamePhase === 'create';
 
-  const handleSequenceLengthChange = useCallback((increment: boolean) => {
-    const newLength = increment ? sequenceLength + 1 : Math.max(3, sequenceLength - 1);
-    if (newLength <= 50) {
-      setSequenceLength(newLength);
-      setRequiredLength(newLength);
-    }
-  }, [sequenceLength, setRequiredLength]);
-
-  const triggerCelebration = (isGuesserWin: boolean) => {
-    const currentPlayerIsBottom = gameState.currentTurn === 1;
-    const isBottomPlayerWinning = isGuesserWin ? currentPlayerIsBottom : !currentPlayerIsBottom;
-    const y = isBottomPlayerWinning ? 0.8 : 0.2;
-    
-    confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { x: 0.1, y },
-      gravity: 0.3,
-      ticks: 200,
-      startVelocity: 35,
-      scalar: 1.2,
-      angle: 45
-    });
-    
-    confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { x: 0.9, y },
-      gravity: 0.3,
-      ticks: 200,
-      startVelocity: 35,
-      scalar: 1.2,
-      angle: 135
-    });
-  };
-
-  const handleKeyPress = useCallback((note: string) => {
+  const handleKeyPress = (note: string) => {
     if (isCreating) {
-      if (gameState.sequence.length < sequenceLength) {
+      if (gameState.sequence.length < requiredLength) {
         addToSequence(note);
-        if (gameState.sequence.length + 1 === sequenceLength) {
+        if (gameState.sequence.length + 1 === requiredLength) {
           setTimeout(() => nextTurn(), 500);
         }
       }
     } else {
-      const isCorrect = checkSequence([...gameState.sequence.slice(0, currentGuessIndex), note]);
-      
-      if (!isCorrect) {
-        setLives(prev => {
-          const newLives = prev - 1;
-          if (newLives === 0) {
-            const points = sequenceLength * 100;
-            const creatorIndex = (gameState.currentTurn + 1) % 2;
-            updateScore(creatorIndex, points);
-            playFailureSound();
-            triggerCelebration(false);
-            toast({
-              title: "Game Over!",
-              description: `${gameState.players[creatorIndex].name} wins ${points} points!`,
-              duration: 1500,
-              className: "bg-red-500 text-white",
-            });
+      // Only allow input if we haven't reached the sequence length
+      if (guessSequence.length < gameState.sequence.length) {
+        setGuessSequence(prev => {
+          const newSequence = [...prev, note];
+          if (newSequence.length === gameState.sequence.length) {
+            const isCorrect = checkSequence(newSequence);
+            
+            // Play appropriate sound
+            if (isCorrect) {
+              playSuccessSound();
+            } else {
+              playFailureSound();
+            }
+
+            // Show round transition
+            setNextRoundNumber(gameState.currentRound + 1);
+            setShowRoundTransition(true);
+            
             setTimeout(() => {
-              setGuessStatus([]);
-              setCurrentGuessIndex(0);
-              setLives(3);
+              setGuessSequence([]);
+              setShowRoundTransition(false);
               nextTurn();
-            }, 1500);
-          } else {
-            playFailureSound();
-            toast({
-              title: "Wrong note!",
-              description: `${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining`,
-              variant: "destructive",
-              duration: 1500,
-            });
-            setGuessStatus([]);
-            setCurrentGuessIndex(0);
+            }, 2000);
           }
-          return newLives;
+          return newSequence;
         });
-        return;
       }
-
-      setGuessStatus(prev => {
-        const newStatus = [...prev];
-        newStatus[currentGuessIndex] = 'correct';
-        return newStatus;
-      });
-      
-      setCurrentGuessIndex(prev => {
-        const nextIndex = prev + 1;
-        if (nextIndex === gameState.sequence.length) {
-          const points = sequenceLength * 100;
-          updateScore(gameState.currentTurn, points);
-          playSuccessSound();
-          triggerCelebration(true);
-          toast({
-            title: "Round Complete!",
-            description: `${currentPlayer.name} wins ${points} points!`,
-            duration: 1500,
-            className: "bg-green-500 text-white",
-          });
-          
-          setTimeout(() => {
-            setGuessStatus([]);
-            setLives(3);
-            setCurrentGuessIndex(0);
-            nextTurn();
-          }, 1500);
-        }
-        return nextIndex;
-      });
     }
-  }, [isCreating, gameState.sequence, currentGuessIndex, sequenceLength, addToSequence, nextTurn, checkSequence, currentPlayer.name, gameState.currentTurn, gameState.players, updateScore]);
-
-  useEffect(() => {
-    if (isCreating) {
-      setGuessStatus([]);
-      setCurrentGuessIndex(0);
-      setLives(3);
-    }
-  }, [isCreating]);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-piano-bg">
-      <GameStatus 
-        currentRound={gameState.currentRound}
-        players={gameState.players}
-        onEndGame={() => setShowEndGameModal(true)}
-      />
-
-      <div className="flex-1 flex flex-col justify-between pt-16">
-        <div className="flex-1 flex items-center justify-center">
-          <PianoKeyboard
-            isRotated={true}
-            isDisabled={gameState.currentTurn === 1}
-            onKeyPress={handleKeyPress}
-          />
+      <div className="flex justify-between items-center p-4 bg-background/80 backdrop-blur-sm fixed w-full top-0 z-50">
+        <div className="text-lg font-semibold">
+          Round {gameState.currentRound}
         </div>
+        <div className="flex flex-wrap justify-center gap-2 md:gap-4">
+          {gameState.players.map((player, index) => (
+            <div
+              key={player.name}
+              className={cn(
+                'px-4 py-2 rounded-lg transition-colors',
+                gameState.currentTurn === index
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted'
+              )}
+            >
+              {player.name}: {player.score}
+            </div>
+          ))}
+        </div>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="outline">End Game</Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. All progress will be lost.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={resetGame}>
+                End Game
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
 
-        <div className="text-center py-4 glass-morphism mx-4 rounded-lg">
-          <div className="text-xl font-semibold mb-2">
-            {currentPlayer.name}'s turn to {isCreating ? 'create' : 'guess'}
-          </div>
-          
-          {isCreating && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-center gap-4">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleSequenceLengthChange(false)}
-                >
-                  -
-                </Button>
-                <Input
-                  type="number"
-                  min={3}
-                  max={50}
-                  value={sequenceLength}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value);
-                    if (value >= 3 && value <= 50) {
-                      setSequenceLength(value);
-                      setRequiredLength(value);
-                    }
-                  }}
-                  className="w-20 text-center"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleSequenceLengthChange(true)}
-                >
-                  +
-                </Button>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-sm text-white bg-black/40 px-3 py-1 rounded-full font-medium">
-                  Sequence Progress: {gameState.sequence.length} / {sequenceLength} notes
-                </div>
-                <Progress 
-                  value={(gameState.sequence.length / sequenceLength) * 100} 
-                  className="w-64"
-                />
+      <div className="flex-1 flex flex-col justify-between pt-16 md:pt-20">
+        <PianoKeyboard
+          isRotated={true}
+          isDisabled={gameState.currentTurn === 1}
+          onKeyPress={handleKeyPress}
+        />
+
+        <div className="relative">
+          {showRoundTransition && (
+            <div className="absolute inset-0 flex items-center justify-center z-50">
+              <div className="text-4xl font-bold text-primary animate-bounce bg-background/90 px-8 py-4 rounded-full">
+                Round {nextRoundNumber}!
               </div>
             </div>
           )}
 
-          {!isCreating && (
-            <GuessIndicator
-              lives={lives}
-              guessStatus={guessStatus}
-              sequenceLength={gameState.sequence.length}
-              currentGuessIndex={currentGuessIndex}
-            />
-          )}
+          <div className="text-center py-8 animate-fade-in glass-morphism mx-4 rounded-lg">
+            <div className="text-2xl font-semibold mb-2">
+              {currentPlayer.name}'s turn to {isCreating ? 'create' : 'guess'}
+            </div>
+            <div className="text-muted-foreground">
+              {isCreating
+                ? `Play ${requiredLength} notes`
+                : `Reproduce the sequence (${guessSequence.length}/${gameState.sequence.length})`}
+            </div>
+          </div>
         </div>
 
-        <div className="flex-1 flex items-center justify-center">
-          <PianoKeyboard
-            isDisabled={gameState.currentTurn === 0}
-            onKeyPress={handleKeyPress}
-          />
-        </div>
+        <PianoKeyboard
+          isDisabled={gameState.currentTurn === 0}
+          onKeyPress={handleKeyPress}
+        />
       </div>
-
-      <GameWinnerModal
-        isOpen={showEndGameModal}
-        players={gameState.players}
-        onClose={() => {
-          resetToWelcome();
-          setShowEndGameModal(false);
-        }}
-        onPlayAgain={() => {
-          resetGame();
-          setShowEndGameModal(false);
-        }}
-      />
     </div>
   );
 };

@@ -11,7 +11,7 @@ const WelcomeScreen: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="w-full max-w-md space-y-8 p-8 animate-fade-in">
         <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold tracking-tight">Piano Jugalbandi Game</h1>
+          <h1 className="text-4xl font-bold tracking-tight">Piano Memory Game</h1>
           <p className="text-muted-foreground">
             Test your memory and musical skills against a friend
           </p>

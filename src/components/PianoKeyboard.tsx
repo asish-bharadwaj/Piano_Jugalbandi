@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import PianoKey from './PianoKey';
 import { cn } from '@/lib/utils';
 
@@ -9,7 +9,7 @@ interface PianoKeyboardProps {
 }
 
 const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const OCTAVES = [4, 5];
+const OCTAVES = [3, 4];
 
 const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   isRotated = false,
@@ -17,20 +17,12 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   onKeyPress,
 }) => {
   const [pressedKey, setPressedKey] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleKeyPress = useCallback((note: string) => {
-    if (isProcessing) return;
-    
-    setIsProcessing(true);
+  const handleKeyPress = (note: string) => {
     setPressedKey(note);
     onKeyPress(note);
-    
-    setTimeout(() => {
-      setPressedKey(null);
-      setIsProcessing(false);
-    }, 300);
-  }, [onKeyPress, isProcessing]);
+    setTimeout(() => setPressedKey(null), 200);
+  };
 
   const keys = OCTAVES.flatMap(octave =>
     NOTES.map(note => ({
@@ -42,11 +34,11 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   return (
     <div
       className={cn(
-        'flex justify-center p-2 md:p-4 transition-transform duration-300 overflow-x-auto max-w-full',
+        'flex justify-center p-4 md:p-8 transition-transform duration-300',
         isRotated && 'rotate-180'
       )}
     >
-      <div className="flex relative perspective-1000 min-w-fit scale-75 md:scale-100">
+      <div className="flex relative perspective-1000">
         {keys.map(({ note, isBlack }) => (
           <PianoKey
             key={note}
@@ -55,11 +47,7 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
             isPressed={pressedKey === note}
             isDisabled={isDisabled}
             onPress={handleKeyPress}
-            className={cn(
-              "transform-style-preserve-3d",
-              isRotated && "rotate-180"
-            )}
-            isRotated={isRotated}
+            className="transform-style-preserve-3d"
           />
         ))}
       </div>
