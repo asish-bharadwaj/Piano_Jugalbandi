@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { calculateScore, getRequiredSequenceLength } from '@/utils/gameUtils';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 
 interface Player {
   name: string;
@@ -14,6 +13,7 @@ interface GameState {
   sequence: string[];
   isPlaying: boolean;
   gamePhase: 'welcome' | 'create' | 'guess' | 'end';
+  requiredLength: number;
 }
 
 interface GameContextType {
@@ -24,6 +24,9 @@ interface GameContextType {
   checkSequence: (sequence: string[]) => boolean;
   nextTurn: () => void;
   resetGame: () => void;
+  resetToWelcome: () => void;
+  setRequiredLength: (length: number) => void;
+  updateScore: (playerIndex: number, points: number) => void;
 }
 
 const initialState: GameState = {
@@ -36,6 +39,7 @@ const initialState: GameState = {
   sequence: [],
   isPlaying: false,
   gamePhase: 'welcome',
+  requiredLength: 3,
 };
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -57,7 +61,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ...prev,
       isPlaying: true,
       gamePhase: 'create',
-      currentTurn: 0, // Always start with player 1 creating
+      currentTurn: 0,
+      currentRound: 1,
+      sequence: [],
+      requiredLength: 3,
     }));
   }, []);
 
@@ -68,77 +75,68 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
   }, []);
 
+  const updateScore = useCallback((playerIndex: number, points: number) => {
+    setGameState(prev => ({
+      ...prev,
+      players: prev.players.map((player, index) => 
+        index === playerIndex 
+          ? { ...player, score: player.score + points }
+          : player
+      ) as [Player, Player],
+    }));
+  }, []);
+
   const checkSequence = useCallback((guessSequence: string[]) => {
-    const isCorrect = gameState.sequence.every(
+    const isCorrect = gameState.sequence.slice(0, guessSequence.length).every(
       (note, index) => note === guessSequence[index]
     );
-
-    setGameState(prev => {
-      const guessingPlayerIndex = prev.currentTurn;
-      const creatingPlayerIndex = guessingPlayerIndex === 0 ? 1 : 0;
-      const updatedPlayers = [...prev.players] as [Player, Player];
-
-      const scoreChange = calculateScore(isCorrect, prev.currentRound, true);
-      
-      if (isCorrect) {
-        updatedPlayers[guessingPlayerIndex].score += scoreChange;
-        toast({
-          title: "Great job! 🎉",
-          description: `+${scoreChange} points!`,
-          duration: 1000, // Changed to 1000ms (1 second)
-        });
-      } else {
-        const creatorScore = calculateScore(isCorrect, prev.currentRound, false);
-        updatedPlayers[creatingPlayerIndex].score += creatorScore;
-        toast({
-          title: "Nice try!",
-          description: `${updatedPlayers[creatingPlayerIndex].name} gets ${creatorScore} points!`,
-          variant: "destructive",
-          duration: 1000, // Changed to 1000ms (1 second)
-        });
-      }
-
-      return {
-        ...prev,
-        players: updatedPlayers,
-      };
-    });
-
     return isCorrect;
   }, [gameState.sequence]);
 
   const nextTurn = useCallback(() => {
     setGameState(prev => {
-      // If we just finished a guess phase
+      const isOddRound = prev.currentRound % 2 === 1;
+      
       if (prev.gamePhase === 'guess') {
-        // Move to the next round and switch roles
-        const nextRound = prev.currentRound + 1;
-        // In odd rounds, player 1 creates (turn 0)
-        // In even rounds, player 2 creates (turn 1)
-        const nextCreatingPlayer = nextRound % 2 === 1 ? 0 : 1;
-        
         return {
           ...prev,
-          currentRound: nextRound,
-          currentTurn: nextCreatingPlayer,
+          currentRound: prev.currentRound + 1,
+          currentTurn: prev.currentRound % 2 === 0 ? 0 : 1,
           gamePhase: 'create',
-          sequence: [], // Clear sequence for new round
+          sequence: [],
+          isPlaying: true,
         };
       } else {
-        // If we just finished create phase, switch to guess phase
-        // The other player should guess
-        const guessingPlayer = prev.currentTurn === 0 ? 1 : 0;
         return {
           ...prev,
-          currentTurn: guessingPlayer,
+          currentTurn: isOddRound ? 1 : 0,
           gamePhase: 'guess',
+          isPlaying: true,
         };
       }
     });
   }, []);
 
-  const resetGame = useCallback(() => {
+  const resetToWelcome = useCallback(() => {
     setGameState(initialState);
+  }, []);
+
+  const resetGame = useCallback(() => {
+    setGameState({
+      ...initialState,
+      players: gameState.players.map(player => ({ ...player, score: 0 })) as [Player, Player],
+      gamePhase: 'create',
+      isPlaying: true,
+      requiredLength: 3,
+    });
+  }, [gameState.players]);
+
+  const setRequiredLength = useCallback((length: number) => {
+    const clampedLength = Math.max(3, Math.min(50, length));
+    setGameState(prev => ({
+      ...prev,
+      requiredLength: clampedLength,
+    }));
   }, []);
 
   return (
@@ -150,6 +148,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       checkSequence,
       nextTurn,
       resetGame,
+      resetToWelcome,
+      setRequiredLength,
+      updateScore,
     }}>
       {children}
     </GameContext.Provider>

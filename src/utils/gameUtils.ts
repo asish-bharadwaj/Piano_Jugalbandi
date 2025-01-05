@@ -12,8 +12,6 @@ export const calculateScore = (
 };
 
 export const determineNextTurn = (currentRound: number, currentTurn: number): number => {
-  // In odd rounds, player 1 creates (turn 0), player 2 guesses (turn 1)
-  // In even rounds, player 2 creates (turn 1), player 1 guesses (turn 0)
   const isOddRound = currentRound % 2 === 1;
   if (currentTurn === 0) {
     return isOddRound ? 1 : 0;
