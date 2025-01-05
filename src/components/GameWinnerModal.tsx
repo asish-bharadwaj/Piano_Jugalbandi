@@ -70,7 +70,7 @@
 
 // export default GameWinnerModal;
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -78,62 +78,69 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { useGame } from "@/contexts/GameContext";
+import axios from 'axios';
+
+interface Player {
+  name: string;
+  score: number;
+}
 
 interface GameWinnerModalProps {
   isOpen: boolean;
-  players: Array<{ name: string; score: number }>;
+  players: Array<Player>;
   onClose: () => void;
   onPlayAgain: () => void;
 }
 
-const GameWinnerModal = ({
-  isOpen,
-  players,
-  onClose,
-  onPlayAgain,
-}: GameWinnerModalProps) => {
-  const winner =
-    players[0].score > players[1].score
-      ? players[0].name
-      : players[0].score < players[1].score
+interface LeaderboardEntry {
+  name: string;
+  totalScore: number;
+  gamesPlayed: number;
+  averageScore: number;
+}
+
+const GameWinnerModal = ({ isOpen, players, onClose, onPlayAgain }: GameWinnerModalProps) => {
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const winner = players[0].score > players[1].score
+    ? players[0].name
+    : players[0].score < players[1].score
       ? players[1].name
       : "It's a tie";
 
-  const uploadScores = async () => {
-    const game = "piano_game"; // Name of the game
+  useEffect(() => {
+    if (isOpen) {
+      updateLeaderboard();
+    }
+  }, [isOpen]);
 
-    const uploadScore = async (player: string, score: number) => {
-      try {
-        const response = await fetch(
-          `../save.php?player=${encodeURIComponent(player)}&game=${encodeURIComponent(
-            game
-          )}&score=${score}`,
-          {
-            method: "GET",
-          }
-        );
-        if (response.ok) {
-          toast.success(`Score for ${player} uploaded successfully.`);
-        } else {
-          toast.error(`Failed to upload score for ${player}.`);
-        }
-      } catch (error) {
-        toast.error(`Error uploading score for ${player}.`);
+  const updateLeaderboard = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Update scores for both players
+      for (const player of players) {
+        await axios.post('/api/leaderboard/update-score', {
+          playerName: player.name,
+          score: player.score
+        });
       }
-    };
 
-    // Upload scores for both players
-    await Promise.all(
-      players.map(({ name, score }) => uploadScore(name, score))
-    );
+      // Fetch updated leaderboard
+      const response = await axios.get('/api/leaderboard');
+      setLeaderboard(response.data.leaderboard);
+    } catch (error) {
+      console.error('Error updating leaderboard:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCloseModal = (open: boolean) => {
     if (!open) {
-      uploadScores(); // Upload scores when closing the game
-      onClose(); // Resume the game
+      onClose();
     }
   };
 
@@ -146,17 +153,45 @@ const GameWinnerModal = ({
           </DialogTitle>
         </DialogHeader>
         <div className="text-center space-y-6">
+          {/* Game Results */}
           <div className="space-y-2">
-            <p className="text-xl text-white/90">
-              {players[0].name}: {players[0].score} points
-            </p>
-            <p className="text-xl text-white/90">
-              {players[1].name}: {players[1].score} points
-            </p>
+            <p className="text-xl text-white/90">{players[0].name}: {players[0].score} points</p>
+            <p className="text-xl text-white/90">{players[1].name}: {players[1].score} points</p>
           </div>
           <p className="text-2xl font-semibold text-white">
             {winner === "It's a tie" ? winner : `${winner} wins!`}
           </p>
+
+          {/* Leaderboard Section */}
+          <div className="border-t border-white/20 pt-4">
+            <h3 className="text-xl font-semibold text-white mb-3">Top Players</h3>
+            <div className="space-y-2 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-purple-500 scrollbar-track-purple-200">
+              {isLoading ? (
+                <p className="text-white/70">Updating leaderboard...</p>
+              ) : (
+                leaderboard.map((entry, index) => (
+                  <div 
+                    key={entry.name} 
+                    className="flex justify-between items-center py-1 px-3 rounded-lg bg-white/10"
+                  >
+                    <span className="text-white/90">
+                      #{index + 1} {entry.name}
+                    </span>
+                    <div className="text-right">
+                      <span className="text-white/90">
+                        {entry.averageScore.toFixed(1)} avg
+                      </span>
+                      <span className="text-white/50 text-sm ml-2">
+                        ({entry.gamesPlayed} games)
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
           <div className="flex justify-center space-x-4 pt-4">
             <Button
               onClick={onPlayAgain}
@@ -167,7 +202,7 @@ const GameWinnerModal = ({
             </Button>
             <Button
               variant="outline"
-              onClick={() => handleCloseModal(false)}
+              onClick={onClose}
               size="lg"
               className="bg-indigo-600 hover:bg-indigo-700 text-white border-none"
             >
@@ -179,8 +214,5 @@ const GameWinnerModal = ({
     </Dialog>
   );
 };
-
-// Initialize Toastify notifications
-toast.configure();
 
 export default GameWinnerModal;
